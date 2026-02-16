@@ -8,10 +8,14 @@ from typing import Optional, Literal, List, Dict
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_core.caches import InMemoryCache
 from langgraph.graph import StateGraph, START, END
+import streamlit as st
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if "secrets" in st.secrets:
+    OPENAI_API_KEY = st.secrets["secrets"]["OPENAI_API_KEY"]
+else:
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Initialize the cache
 cache = InMemoryCache()
