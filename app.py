@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 from workflow import workflow, CampaignInput, MarketingState
-import json
+import json, sys, io, re, tempfile, os
 from datetime import datetime
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -11,10 +12,6 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, Image as RLImage
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-import io
-import re
-import tempfile
-import os
 
 # Set page configuration
 st.set_page_config(
@@ -395,20 +392,11 @@ def generate_analytics_pdf(results):
     
     # Generate and embed conversion funnel chart
     try:
-        import plotly.graph_objects as go
-        import plotly.io as pio
-        import sys
-        
-        # Log environment info for debugging
-        print(f"[PDF DEBUG] Python: {sys.version}", file=sys.stderr)
-        print(f"[PDF DEBUG] Plotly version: {pio.__version__ if hasattr(pio, '__version__') else 'unknown'}", file=sys.stderr)
         
         funnel_data = {
             'Stage': ['Impressions', 'Clicks', 'Conversions'],
             'Count': [total_impressions, total_clicks, total_conversions]
         }
-        
-        print(f"[PDF DEBUG] Creating funnel with data: {funnel_data}", file=sys.stderr)
         
         fig_funnel = go.Figure(go.Funnel(
             y=funnel_data['Stage'],
@@ -418,28 +406,20 @@ def generate_analytics_pdf(results):
         ))
         fig_funnel.update_layout(title="Conversion Funnel", template="plotly_white", height=400, width=600)
         
-        print("[PDF DEBUG] Funnel figure created, attempting image export...", file=sys.stderr)
-        
         try:
             img_bytes = pio.to_image(fig_funnel, format='png', width=600, height=400)
-            print(f"[PDF DEBUG] Image exported successfully, size: {len(img_bytes)} bytes", file=sys.stderr)
         except Exception as export_error:
-            print(f"[PDF DEBUG] Export error: {str(export_error)}", file=sys.stderr)
             img_bytes = fig_funnel.to_image(format='png', width=600, height=400)
-            print(f"[PDF DEBUG] Fallback export successful, size: {len(img_bytes)} bytes", file=sys.stderr)
         
         # Save to temp file
         temp_funnel = tempfile.NamedTemporaryFile(delete=False, suffix='.png', mode='wb')
         temp_funnel.write(img_bytes)
         temp_funnel.close()
-        
-        print(f"[PDF DEBUG] Temp file created: {temp_funnel.name}", file=sys.stderr)
-        
+                
         if os.path.exists(temp_funnel.name) and os.path.getsize(temp_funnel.name) > 0:
             story.append(Paragraph("Conversion Funnel Analysis", heading_style))
             story.append(RLImage(temp_funnel.name, width=5*inch, height=3.3*inch))
             story.append(Spacer(1, 0.2*inch))
-            print("[PDF DEBUG] Funnel chart added to PDF successfully!", file=sys.stderr)
             # Add to cleanup list
             temp_files_to_cleanup.append(temp_funnel.name)
         else:
@@ -465,8 +445,6 @@ def generate_analytics_pdf(results):
             'ROAS': c.revenue/c.spend if c.spend > 0 else 0
         } for c in results['campaigns']]
         
-        print(f"[PDF DEBUG] Creating scatter plot with {len(chart_df_data)} campaigns", file=sys.stderr)
-        
         fig_scatter = px.scatter(
             pd.DataFrame(chart_df_data), 
             x="Spend", 
@@ -480,30 +458,22 @@ def generate_analytics_pdf(results):
         )
         fig_scatter.update_layout(height=400, width=600)
         
-        print("[PDF DEBUG] Scatter figure created, attempting image export...", file=sys.stderr)
-        
         # Try to export image
         try:
             img_bytes = pio.to_image(fig_scatter, format='png', width=600, height=400)
-            print(f"[PDF DEBUG] Scatter image exported successfully, size: {len(img_bytes)} bytes", file=sys.stderr)
         except Exception as export_error:
-            print(f"[PDF DEBUG] Export error: {str(export_error)}", file=sys.stderr)
             img_bytes = fig_scatter.to_image(format='png', width=600, height=400)
-            print(f"[PDF DEBUG] Fallback export successful, size: {len(img_bytes)} bytes", file=sys.stderr)
         
         # Save to temp file
         temp_scatter = tempfile.NamedTemporaryFile(delete=False, suffix='.png', mode='wb')
         temp_scatter.write(img_bytes)
         temp_scatter.close()
         
-        print(f"[PDF DEBUG] Temp file created: {temp_scatter.name}", file=sys.stderr)
-        
         # Verify file exists and has content
         if os.path.exists(temp_scatter.name) and os.path.getsize(temp_scatter.name) > 0:
             story.append(Paragraph("Campaign Performance Analysis", heading_style))
             story.append(RLImage(temp_scatter.name, width=5*inch, height=3.3*inch))
             story.append(Spacer(1, 0.2*inch))
-            print("[PDF DEBUG] Scatter chart added to PDF successfully!", file=sys.stderr)
             # Add to cleanup list
             temp_files_to_cleanup.append(temp_scatter.name)
         else:
@@ -524,8 +494,6 @@ def generate_analytics_pdf(results):
         
         chart_df_data = [{'Name': c.campaign_name, 'Spend': c.spend, 'Revenue': c.revenue, 'ROAS': c.revenue/c.spend if c.spend > 0 else 0} for c in results['campaigns']]
         
-        print(f"[PDF DEBUG] Creating efficiency frontier chart", file=sys.stderr)
-        
         fig_efficiency = px.scatter(pd.DataFrame(chart_df_data), x="Spend", y="Revenue", size="ROAS", color="ROAS",
                                    hover_name="Name", template="plotly_white", color_continuous_scale='Purples',
                                    title="Efficiency Frontier: Spend vs Revenue")
@@ -542,15 +510,12 @@ def generate_analytics_pdf(results):
             story.append(RLImage(temp_efficiency.name, width=5*inch, height=3.3*inch))
             story.append(Spacer(1, 0.2*inch))
             temp_files_to_cleanup.append(temp_efficiency.name)
-            print("[PDF DEBUG] Efficiency chart added!", file=sys.stderr)
     except Exception as e:
-        print(f"[PDF ERROR] Efficiency chart failed: {str(e)}", file=sys.stderr)
+        pass
     
     # Reach & Impact Bubble Chart
     try:
         bubble_df_data = [{'Name': c.campaign_name, 'Impressions': c.impressions, 'Conversions': c.conversions, 'Spend': c.spend} for c in results['campaigns']]
-        
-        print(f"[PDF DEBUG] Creating bubble chart", file=sys.stderr)
         
         fig_bubble = px.scatter(pd.DataFrame(bubble_df_data), x="Impressions", y="Conversions", size="Spend", color="Name",
                                template="plotly_white", title="Reach & Impact: Impressions vs Conversions")
@@ -566,16 +531,13 @@ def generate_analytics_pdf(results):
             story.append(RLImage(temp_bubble.name, width=5*inch, height=3.3*inch))
             story.append(Spacer(1, 0.2*inch))
             temp_files_to_cleanup.append(temp_bubble.name)
-            print("[PDF DEBUG] Bubble chart added!", file=sys.stderr)
     except Exception as e:
-        print(f"[PDF ERROR] Bubble chart failed: {str(e)}", file=sys.stderr)
+        pass
     
     # Performance Quadrant Matrix
     try:
         quad_df_data = [{'Campaign': c.campaign_name, 'ROAS': c.revenue/c.spend if c.spend > 0 else 0, 'Spend': c.spend, 'Channel': c.channel} for c in results['campaigns']]
         quad_df = pd.DataFrame(quad_df_data)
-        
-        print(f"[PDF DEBUG] Creating quadrant matrix", file=sys.stderr)
         
         fig_quad = px.scatter(quad_df, x="Spend", y="ROAS", color="Channel", size="Spend", hover_name="Campaign", 
                              template="plotly_white", title="Performance Quadrant Matrix")
@@ -597,17 +559,14 @@ def generate_analytics_pdf(results):
             story.append(RLImage(temp_quad.name, width=5*inch, height=3.3*inch))
             story.append(Spacer(1, 0.2*inch))
             temp_files_to_cleanup.append(temp_quad.name)
-            print("[PDF DEBUG] Quadrant matrix added!", file=sys.stderr)
     except Exception as e:
-        print(f"[PDF ERROR] Quadrant matrix failed: {str(e)}", file=sys.stderr)
+        pass
     
     # Budget Reallocation Chart
     try:
         recs = results.get('recommendations', [])
         if recs:
             rec_df = pd.DataFrame(recs)
-            
-            print(f"[PDF DEBUG] Creating budget reallocation chart", file=sys.stderr)
             
             fig_budget = go.Figure()
             fig_budget.add_trace(go.Bar(name='Current Budget', x=rec_df['campaign_name'], y=rec_df['current_budget'], marker_color='#cbd5e1'))
@@ -625,9 +584,8 @@ def generate_analytics_pdf(results):
                 story.append(RLImage(temp_budget.name, width=5*inch, height=3.3*inch))
                 story.append(Spacer(1, 0.2*inch))
                 temp_files_to_cleanup.append(temp_budget.name)
-                print("[PDF DEBUG] Budget chart added!", file=sys.stderr)
     except Exception as e:
-        print(f"[PDF ERROR] Budget chart failed: {str(e)}", file=sys.stderr)
+        pass
     
     # Campaign Diagnostics
     story.append(PageBreak())
@@ -641,16 +599,14 @@ def generate_analytics_pdf(results):
     # Build PDF and cleanup temp files
     try:
         doc.build(story)
-        print("[PDF DEBUG] PDF built successfully!", file=sys.stderr)
     finally:
         # Clean up temp image files
         for temp_file in temp_files_to_cleanup:
             try:
                 if os.path.exists(temp_file):
                     os.unlink(temp_file)
-                    print(f"[PDF DEBUG] Cleaned up temp file: {temp_file}", file=sys.stderr)
             except Exception as cleanup_error:
-                print(f"[PDF DEBUG] Failed to cleanup {temp_file}: {cleanup_error}", file=sys.stderr)
+                pass
     
     buffer.seek(0)
     return buffer
@@ -795,7 +751,7 @@ with tab1:
                     print(f"Error deleting file: {e}")
             st.rerun()
 
-# --- Tab 2: Performance Analytics ---
+# Tab 2: Performance Analytics
 with tab2:
     if st.session_state.results:
         results = st.session_state.results
@@ -925,7 +881,7 @@ with tab2:
     else:
         st.info("📥 Input campaign data and execute optimization to view comprehensive visual analytics.")
 
-# --- Tab 3: Strategic Blueprint ---
+# Tab 3: Strategic Blueprint 
 with tab3:
     if st.session_state.results:
         results = st.session_state.results
