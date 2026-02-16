@@ -1,0 +1,14 @@
+pydantic
+langchain-openai
+streamlit
+langchain-core
+langchain-community
+langgraph
+python-dotenv
+cvxpy
+reportlab
+numpy
+plotly
+pandas
+datetime
+kaleido==0.2.1
